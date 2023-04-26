@@ -22,5 +22,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("", views.Newsletters.as_view()),
     path("newsletter/<str:newsletter_id>", views.NewsletterDetail.as_view()),
+    path("newsletter/<str:newsletter_id>/publish", views.Publish.as_view()),
     path("subscribe", views.Subscription.as_view()),
 ]

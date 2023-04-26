@@ -1,10 +1,17 @@
+from datetime import datetime
 import os
 import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .db import subscribers_collection
 import json
-from bson.json_util import dumps, loads
+from bson.json_util import dumps
+from bson.objectid import ObjectId
+from trycourier import Courier
+from trycourier.exceptions import CourierAPIException
+
+courier_client = Courier(auth_token=os.getenv("COURIER_AUTH_TOKEN"))
+SUBSCRIPTION_LIST_ID = "75dde670004945b181e1bea15391ee94"
 
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
@@ -76,7 +83,7 @@ class NewsletterDetail(APIView):
             f"{NOTION_BASE_URL}/blocks/{id}/children", headers=headers)
         newsletter_data = get_page_detail(res.json())
 
-        return Response(data={"newsletter": newsletter_data})
+        return Response(data={"newsletter": newsletter_data, "id": id})
 
 
 class Subscription(APIView):
@@ -86,9 +93,67 @@ class Subscription(APIView):
 
     def post(self, request):
         subscriber_data = json.loads(request.body)
-        if subscribers_collection.find_one({"email": subscriber_data['email']}):
-            return Response(data={"message": "Bad Request! User already exist!"}, status=400)
 
-        user_id = subscribers_collection.insert_one(
-            subscriber_data).inserted_id
-        return Response(data={"subscriber_id": str(user_id)})
+        subscriber = subscribers_collection.find_one(
+            {"email": subscriber_data['email']})
+
+        user_id = None
+        if subscriber:
+            user_id = str(subscriber["_id"])
+        else:
+            user_id = str(subscribers_collection.insert_one({
+                "email": subscriber_data["email"],
+                "name": subscriber_data["name"],
+                "subscribed_at": datetime.now()
+            }).inserted_id)
+
+        # create a new courier profile
+        courier_client.profiles.replace(recipient_id=user_id, profile={
+            "email": subscriber_data["email"],
+            "name": subscriber_data["name"],
+        })
+
+        try:
+            # subscribe to the newsletter list
+            courier_client.lists.subscribe(
+                list_id=SUBSCRIPTION_LIST_ID, recipient_id=user_id)
+
+            # send newsletter oboarding email
+            courier_client.send(recipient=user_id, event="TCJDJWKGG7M0J7QAE6H31AS9GGCW", data={
+                "sender_name": "Fazza", "day_of_week": "monday"})
+
+        except CourierAPIException:
+            # TODO: handle it better please
+            print(CourierAPIException.message)
+
+        return Response(data={"subscriber_id": user_id})
+
+    def delete(self, request):
+        subscriber_id = json.loads(request.body)["subscriber_id"]
+
+        courier_client.lists.unsubscribe(
+            list_id=SUBSCRIPTION_LIST_ID, recipient_id=subscriber_id)
+        subscribers_collection.delete_one({"_id": ObjectId(subscriber_id)})
+
+        return Response(data={"message": "User successfully unsubscribed!"})
+
+
+class Publish(APIView):
+    def post(self, request, *args, **kwargs):
+        newsletter_id = kwargs['newsletter_id']
+
+        # try:
+        #     courier_client.send_message({'to': {'list_id': SUBSCRIPTION_LIST_ID}, 'content': {
+        #         "type": "channel",
+        #         "channel": "email",
+        #         "raw": {
+        #             "subject": "My Subject",
+        #             "html": "<mjml></mjml>",
+        #             "text": "## Lorem ipsum dolor, sit amet",
+        #             "transformers": ["handlebars", "mjml"]
+        #         },
+        #     }})
+        # except CourierAPIException:
+        #     print(CourierAPIException.message)
+
+        return Response(data=resp)
