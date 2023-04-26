@@ -4,7 +4,7 @@ from pprint import pprint
 import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .db import subscribers_collection, newsletter_collection
+from .db import subscribers_collection
 import json
 from bson.json_util import dumps
 from bson.objectid import ObjectId
@@ -160,8 +160,14 @@ def update_notion_publish(newsletter_id):
 class Publish(APIView):
     def post(self, request, *args, **kwargs):
         newsletter_id = kwargs['newsletter_id']
-        updated_notion_page = update_notion_publish(newsletter_id)
 
-        pprint(updated_notion_page)
+        updated_page = update_notion_publish(newsletter_id)
+        page_data = format_newsletter_data(updated_page)
+
+        courier_client.lists.send(list=SUBSCRIPTION_LIST_ID, event="77ZT1MSZ9GM6DZQJDXP3YC4JPYQC", data={
+            "email_subject": page_data['title'],
+            "sender_name": "Agus from Webdev Complexify",
+            "newsletter_url": f"http://localhost:5173/newsletter/{newsletter_id}"
+        })
 
         return Response(data={"message": "update successful!"})

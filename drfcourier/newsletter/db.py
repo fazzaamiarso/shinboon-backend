@@ -14,10 +14,6 @@ except Exception as e:
 db = client['newsletter']
 
 subscribers_collection = db.get_collection("subscribers")
-newsletter_collection = db.get_collection("newsletter")
 
 if subscribers_collection == None:
     subscribers_collection = db.create_collection("subscribers")
-
-if newsletter_collection == None:
-    newsletter_collection = db.create_collection("newsletter")
