@@ -1,9 +1,10 @@
 from datetime import datetime
 import os
+from pprint import pprint
 import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .db import subscribers_collection
+from .db import subscribers_collection, newsletter_collection
 import json
 from bson.json_util import dumps
 from bson.objectid import ObjectId
@@ -28,10 +29,12 @@ headers = {
 
 def format_newsletter_data(data):
     props = data['properties']
+    publish_date = props['publish date']['date']
+
     return dict({
         "title": props["title"]['title'][0]['text']['content'],
-        "status": props['status']['select']['name'],
-        "published_at": props['publish date']['date']['start'],
+        "published_at": publish_date['start'] if publish_date != None else None,
+        "published": props["published"]["checkbox"],
         "id": data['id']
     })
 
@@ -50,7 +53,7 @@ class Newsletters(APIView):
         return Response(data={"newsletters": newsletters})
 
 
-def get_page_detail(properties):
+def get_page_content(properties):
     block_types_map_to_html_tag = {
         "heading_1": {"tag": "h1", "content": "heading_1"},
         "heading_2": {"tag": "h2", "content": "heading_2"},
@@ -79,11 +82,16 @@ def get_page_detail(properties):
 class NewsletterDetail(APIView):
     def get(self, request, *args, **kwargs):
         id = kwargs['newsletter_id']
+
         res = requests.get(
             f"{NOTION_BASE_URL}/blocks/{id}/children", headers=headers)
-        newsletter_data = get_page_detail(res.json())
+        newsletter_content = get_page_content(res.json())
 
-        return Response(data={"newsletter": newsletter_data, "id": id})
+        res = requests.get(
+            f"{NOTION_BASE_URL}/pages/{id}", headers=headers)
+        newsletter_props = format_newsletter_data(res.json())
+
+        return Response(data={"newsletter": newsletter_content, "properties": newsletter_props,  "id": id})
 
 
 class Subscription(APIView):
@@ -138,22 +146,22 @@ class Subscription(APIView):
         return Response(data={"message": "User successfully unsubscribed!"})
 
 
+def update_notion_publish(newsletter_id):
+    payload = {"properties": {"published": {"checkbox": True},
+                              "publish date": {"type": "date", "date": {"start": datetime.utcnow().isoformat()}}}}
+    pprint(json.dumps(payload))
+
+    res = requests.patch(
+        f"{NOTION_BASE_URL}/pages/{newsletter_id}", headers=headers, json=payload)
+
+    return res.json()
+
+
 class Publish(APIView):
     def post(self, request, *args, **kwargs):
         newsletter_id = kwargs['newsletter_id']
+        updated_notion_page = update_notion_publish(newsletter_id)
 
-        # try:
-        #     courier_client.send_message({'to': {'list_id': SUBSCRIPTION_LIST_ID}, 'content': {
-        #         "type": "channel",
-        #         "channel": "email",
-        #         "raw": {
-        #             "subject": "My Subject",
-        #             "html": "<mjml></mjml>",
-        #             "text": "## Lorem ipsum dolor, sit amet",
-        #             "transformers": ["handlebars", "mjml"]
-        #         },
-        #     }})
-        # except CourierAPIException:
-        #     print(CourierAPIException.message)
+        pprint(updated_notion_page)
 
-        return Response(data=resp)
+        return Response(data={"message": "update successful!"})
