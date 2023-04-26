@@ -1,6 +1,5 @@
 from datetime import datetime
 import os
-from pprint import pprint
 import requests
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -149,7 +148,6 @@ class Subscription(APIView):
 def update_notion_publish(newsletter_id):
     payload = {"properties": {"published": {"checkbox": True},
                               "publish date": {"type": "date", "date": {"start": datetime.utcnow().isoformat()}}}}
-    pprint(json.dumps(payload))
 
     res = requests.patch(
         f"{NOTION_BASE_URL}/pages/{newsletter_id}", headers=headers, json=payload)
@@ -166,7 +164,7 @@ class Publish(APIView):
 
         courier_client.lists.send(list=SUBSCRIPTION_LIST_ID, event="77ZT1MSZ9GM6DZQJDXP3YC4JPYQC", data={
             "email_subject": page_data['title'],
-            "sender_name": "Agus from Webdev Complexify",
+            "sender_name": "Fazza",
             "newsletter_url": f"http://localhost:5173/newsletter/{newsletter_id}"
         })
 
